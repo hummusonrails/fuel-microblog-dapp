@@ -1,23 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import "./App.css";
 
-import { BlogContractAbi__factory } from './contracts';
+import { useIsConnected, useAccount, useConnect, useWallet } from "@fuel-wallet/react";
+import { BlogContractAbi, BlogContractAbi__factory } from './contracts';
 import { BigNumberish, Provider, Wallet, BN } from 'fuels';
-import { Fuel } from '@fuel-wallet/sdk';
+// import { Fuel } from '@fuel-wallet/sdk';
 import { IdentityOutput } from './contracts/BlogContractAbi';
 
 // update with contract address
 const CONTRACT_ID = process.env.REACT_APP_CONTRACT_ID!;
 
   function App() {
-    const [connected, setConnected] = useState<boolean>(false);
-    const [account, setAccount] = useState<string>("");
+    const { isConnected } = useIsConnected();
+    const { connect } = useConnect();
+    const { account } = useAccount();
+    const { wallet } = useWallet({ address: account });
+
     const [posts, setPosts] = useState<Post[]>([]);
     const [newPostContent, setNewPostContent] = useState<string>("");
-    const [loaded, setLoaded] = useState<boolean>(false);
     const [postLengthWarning, setPostLengthWarning] = useState<string>("");
-    
-    const fuel = new Fuel();
+    const [contract, setContract] = useState<BlogContractAbi | null>(null);
 
     type PostOutput = {
       id: BigNumberish;
@@ -32,12 +34,11 @@ const CONTRACT_ID = process.env.REACT_APP_CONTRACT_ID!;
     };
 
     useEffect(() => {
-      setTimeout(() => {
-        checkConnection();
-        setLoaded(true);
-      }, 200)
-      if (connected) getPosts();
-    }, [connected])
+      if (wallet) {
+        const contractInstance = BlogContractAbi__factory.connect(CONTRACT_ID, wallet);
+        setContract(contractInstance);
+      }
+    }, [wallet, setContract]);
 
     function handlePostContentChange(e: React.ChangeEvent<HTMLTextAreaElement>) {
       const value = e.target.value;
@@ -50,20 +51,8 @@ const CONTRACT_ID = process.env.REACT_APP_CONTRACT_ID!;
       }
     }
 
-    async function checkConnection() {
-      const isConnected = await fuel.isConnected();
-      if (isConnected) {
-        const [account] = await fuel.accounts();
-        setAccount(account);
-        setConnected(true);
-      }
-      console.log('Connection status:', isConnected);
-    }
-
-    async function getPosts() {
-      if (fuel) {
-        const wallet = await fuel.getWallet(account);
-        const contract = BlogContractAbi__factory.connect(CONTRACT_ID, wallet);
+    const getPosts = useCallback(async () => { 
+      if (contract && wallet) {
         // get the posts
         try { 
           const response = await contract.functions.get_posts_by_author().simulate();
@@ -79,11 +68,14 @@ const CONTRACT_ID = process.env.REACT_APP_CONTRACT_ID!;
           console.log("error getting posts: ", err);
         }
       }
-    }
+    }, [contract, wallet, setPosts]); 
 
+    useEffect(() => {
+      if (isConnected) getPosts()
+    }, [isConnected, getPosts])
+  
     async function addPost() {
-      if (fuel) {
-        const wallet = await fuel.getWallet(account);
+      if (contract && wallet) {
         const contract = BlogContractAbi__factory.connect(CONTRACT_ID, wallet);
         
         // check if newPostContent is less than 280 chars
@@ -102,12 +94,10 @@ const CONTRACT_ID = process.env.REACT_APP_CONTRACT_ID!;
       }
     }
 
-    if (!loaded) return null
-
     return (
       <>
         <div className="App">
-          {connected && (
+          {isConnected && (
             <>
               <h2 className="main-header">My Little Micro-Blog</h2>
 
