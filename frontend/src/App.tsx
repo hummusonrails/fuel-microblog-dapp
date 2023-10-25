@@ -26,8 +26,6 @@ function App() {
   const { account } = useAccount();
   const { wallet } = useWallet({ address: account });
 
-  console.log(connect);
-
   const [posts, setPosts] = useState<Post[]>([]);
   const [newPostContent, setNewPostContent] = useState<string>("");
   const [postLengthWarning, setPostLengthWarning] = useState<string>("");
